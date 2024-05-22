@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ライフプランチャート</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.0.2"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="css/sample.css">
+</head>
+
+<body>
+    <h1>ライフチャート</h1>
+    <div class="tabs">
+        <div class="tab active" data-tab="chart-content">グラフ</div>
+        <div class="tab" data-tab="table-content">表</div>
+    </div>
+
+    <div class="content active" id="chart-content">
+        <div class="container">
+            <canvas id="lifePlanChart"></canvas>
+        </div>
+
+        <div class="container">
+            <div class="input-container">
+                <input type="number" id="year_input" placeholder="年を入力" class="input-field">
+                <input type="number" id="happiness_input" placeholder="幸福度を入力 (-5〜5)" class="input-field" min="-5"
+                    max="5">
+                <input type="text" id="input" placeholder="タイトルを入力" class="input-field">
+                <input type="number" id="age_min_input" placeholder="開始年齢を入力" class="filter-field">
+                <input type="number" id="age_max_input" placeholder="終了年齢を入力" class="filter-field">
+                <button id="filter" class="button">フィルター</button>
+                <textarea id="text_area" placeholder="メモを入力" class="textarea-field"></textarea>
+            </div>
+            <div class="button-container">
+                <button id="save" class="button">保存</button>
+                <button id="clear" class="button">削除</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="content" id="table-content">
+        <div class="container">
+            <table class="memo-table">
+                <thead>
+                    <tr>
+                        <th>年</th>
+                        <th>幸福度</th>
+                        <th>タイトル</th>
+                        <th>メモ</th>
+                    </tr>
+                </thead>
+                <tbody id="memo-table-body">
+                    <!-- メモのデータがここに挿入されます -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let ageMin = 0;
+        let ageMax = 100;
+
+        function updateTable() {
+            const tableBody = document.getElementById('memo-table-body');
+            tableBody.innerHTML = ''; // 既存の行をクリア
+
+            const years = Array.from({ length: ageMax - ageMin + 1 }, (_, i) => i + ageMin);
+
+            years.forEach(year => {
+                const savedData = localStorage.getItem(`memo2_${year}`);
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    const row = document.createElement('tr');
+
+                    const yearCell = document.createElement('td');
+                    yearCell.textContent = year;
+                    row.appendChild(yearCell);
+
+                    const happinessCell = document.createElement('td');
+                    happinessCell.textContent = parsedData.happiness;
+                    row.appendChild(happinessCell);
+
+                    const titleCell = document.createElement('td');
+                    titleCell.textContent = parsedData.title;
+                    row.appendChild(titleCell);
+
+                    const memoCell = document.createElement('td');
+                    memoCell.textContent = parsedData.text;
+                    row.appendChild(memoCell);
+
+                    tableBody.appendChild(row);
+                }
+            });
+        }
+
+        function updateChart() {
+            const years = Array.from({ length: ageMax - ageMin + 1 }, (_, i) => i + ageMin);
+            lifePlanChart.data.labels = years;
+            lifePlanChart.data.datasets[0].data = years.map(year => {
+                const savedData = localStorage.getItem(`memo2_${year}`);
+                if (savedData) {
+                    const parsedData = JSON.parse(savedData);
+                    return parsedData.happiness;
+                }
+                return null;
+            });
+            lifePlanChart.update();
+        }
+
+        const lifePlanData = {
+            labels: [],
+            datasets: [{
+                data: [],
+                backgroundColor: 'rgba(209, 200, 187, 0.2)', // D1C8BBの半透明
+                borderColor: '#B49A76',
+                borderWidth: 1,
+                fill: false,
+                lineTension: 0,
+                spanGaps: true,
+                pointBackgroundColor: '#D1C8BB',
+                pointBorderColor: '#6B4D3B'
+            }]
+        };
+
+        const config = {
+            type: 'line',
+            data: lifePlanData,
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        min: -5,
+                        max: 5.5, // 上部に余白を追加
+                        stepSize: 1, // 1単位の目盛りを設定
+                        title: {
+                            display: true,
+                            text: '幸福感'
+                        },
+                        ticks: {
+                            stepSize: 1 // 1メモリずつに設定
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: '年'
+                        },
+                        ticks: {
+                            callback: function (value, index, values) {
+                                return Math.round(value * 10) / 10;
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    annotation: {
+                        annotations: {
+                            line1: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: 0,
+                                borderColor: '#DEA7AB',
+                                borderWidth: 2,
+                                label: {
+                                    content: '中央値',
+                                    enabled: true,
+                                    position: 'end',
+                                    backgroundColor: 'rgba(222, 167, 171, 0.8)' // DEA7ABの半透明
+                                }
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const year = context.label;
+                                const savedMemo = localStorage.getItem(`memo2_${year}`);
+                                if (savedMemo) {
+                                    const memoData = JSON.parse(savedMemo);
+                                    return `メモ: ${memoData.text}`;
+                                } else {
+                                    return `(メモはありません)`;
+                                }
+                            }
+                        },
+                        title: function () {
+                            return '';
+                        }
+                    },
+                    legend: {
+                        display: false
+                    }
+                }
+            },
+            plugins: [{
+                afterDatasetsDraw: function (chart) {
+                    const ctx = chart.ctx;
+                    const fontHeight = 14;
+                    ctx.font = `${fontHeight}px "メイリオ", "Meiryo", sans-serif`;
+                    ctx.fillStyle = '#090F11';
+                    chart.data.datasets[0].data.forEach((value, index) => {
+                        if (value !== null) {
+                            const x = chart.scales.x.getPixelForValue(index);
+                            let y = chart.scales.y.getPixelForValue(value);
+                            const year = chart.data.labels[index];
+                            const savedMemo = localStorage.getItem(`memo2_${year}`);
+                            if (savedMemo) {
+                                const memoData = JSON.parse(savedMemo);
+                                const paddingTop = 10;
+                                y = Math.max(y, fontHeight + paddingTop);
+                                ctx.fillText(memoData.title, x + 10, y - 10);
+                            }
+                        }
+                    });
+                }
+            }]
+        };
+
+        window.onload = function () {
+            const ctx = document.getElementById('lifePlanChart').getContext('2d');
+            window.lifePlanChart = new Chart(ctx, config);
+            updateChart();
+            updateTable();
+        };
+
+        $('#filter').on('click', function () {
+            ageMin = parseInt($('#age_min_input').val());
+            ageMax = parseInt($('#age_max_input').val());
+            if (isNaN(ageMin) || isNaN(ageMax) || ageMin < 0 || ageMax < ageMin) {
+                alert('有効な年齢範囲を入力してください。');
+                return;
+            }
+            updateChart();
+            updateTable();
+        });
+
+        $('#save').on('click', function () {
+            const year = parseInt($('#year_input').val());
+            const happiness = parseInt($('#happiness_input').val());
+            if (year >= ageMin && year <= ageMax) {
+                const data = {
+                    title: $('#input').val(),
+                    text: $('#text_area').val(),
+                    happiness: happiness
+                };
+                const json = JSON.stringify(data);
+                localStorage.setItem(`memo2_${year}`, json);
+                alert(`${year}のメモが保存されました。`);
+                updateChart();
+                updateTable();
+            } else {
+                alert("有効な年を入力してください。");
+            }
+        });
+
+        $('#clear').on('click', function () {
+            const year = parseInt($('#year_input').val());
+            if (year >= ageMin && year <= ageMax) {
+                localStorage.removeItem(`memo2_${year}`);
+                alert(`${year}のメモが削除されました。`);
+                $('#text_area').val('');
+                $('#input').val('');
+                $('#happiness_input').val('');
+                updateChart();
+                updateTable();
+            } else {
+                alert("有効な年を入力してください。");
+            }
+        });
+
+        // タブの切り替え
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function () {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+
+                this.classList.add('active');
+                document.getElementById(this.dataset.tab).classList.add('active');
+            });
+        });
+    </script>
+</body>
+
+</html>
